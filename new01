@@ -1,0 +1,88 @@
+import boto3
+import csv
+import configparser
+import os
+
+from airflow import DAG
+from airflow.operators.python_operator import PythonOperator
+from airflow.operators.s3_file_transform_operator import S3FileTransformOperator
+from airflow.utils.dates import days_ago
+
+def split_csv_from_s3(starting_word, s3_bucket, s3_key, config_file, output_dir):
+    # Read the configuration file
+    config = configparser.ConfigParser()
+    config.read(config_file)
+
+    # Connect to the S3 bucket
+    s3 = boto3.client('s3')
+    response = s3.get_object(Bucket=s3_bucket, Key=s3_key)
+    rows = response['Body'].read().decode('utf-8').split('\n')
+
+    # Iterate through each row in the input CSV file
+    for row in csv.reader(rows):
+        # Determine the starting word of the row
+        row_starting_word = row[0].split()[0]
+
+        # Check if there is a configuration for the starting word
+        if row_starting_word == starting_word:
+            # Get the output filename from the configuration
+            output_filename = config[starting_word]['filename']
+            output_path = os.path.join(output_dir, output_filename)
+
+            # Create the output file if it doesn't exist
+            if not os.path.exists(output_path):
+                with open(output_path, 'w', newline='') as outfile:
+                    writer = csv.writer(outfile)
+                    writer.writerow(row)
+
+            # Append the row to the output file
+            with open(output_path, 'a', newline='') as outfile:
+                writer = csv.writer(outfile)
+                writer.writerow(row)
+
+    # Upload generated files back to S3 bucket
+    s3_resource = boto3.resource('s3')
+    s3_bucket_resource = s3_resource.Bucket(s3_bucket)
+    for filename in os.listdir(output_dir):
+        if filename.endswith('.csv'):
+            s3_bucket_resource.upload_file(os.path.join(output_dir, filename), f'split/{filename}')
+
+default_args = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'start_date': days_ago(1),
+}
+
+with DAG(
+    'split_csv_from_s3',
+    default_args=default_args,
+    schedule_interval=None,
+) as dag:
+    starting_words = ['StartingWord1', 'StartingWord2']
+    s3_bucket = 'my-s3-bucket'
+    s3_key = 'path/to/my/csv/file.csv'
+    config_file = 'path/to/my/config.ini'
+    output_dir = '/path/to/output/dir'
+
+    # Split CSV file for each starting word
+    for starting_word in starting_words:
+        task_id = f'split_csv_{starting_word}'
+        op = PythonOperator(
+            task_id=task_id,
+            python_callable=split_csv_from_s3,
+            op_kwargs={
+                'starting_word': starting_word,
+                's3_bucket': s3_bucket,
+                's3_key': s3_key,
+                'config_file': config_file,
+                'output_dir': output_dir,
+            },
+        )
+
+        # Upload generated files to S3 bucket
+        upload_task_id = f'upload_files_{starting_word}'
+        upload_op = S3FileTransformOperator(
+            task_id=upload_task_id,
+            source_s3_key=f'{output_dir}/{{filename}}',
+            dest_s3_key=f'split/{{filename}}',
+            replace
