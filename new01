@@ -1,88 +1,51 @@
-import boto3
-import csv
-import configparser
+#!/usr/bin/env python3
+
 import os
+import datetime
 
-from airflow import DAG
-from airflow.operators.python_operator import PythonOperator
-from airflow.operators.s3_file_transform_operator import S3FileTransformOperator
-from airflow.utils.dates import days_ago
+# Declaration session for variables
+timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M')
+pid = os.getpid()
+current_date = datetime.datetime.now().strftime('%Y.%m.%d_%H.%M.%S')
 
-def split_csv_from_s3(starting_word, s3_bucket, s3_key, config_file, output_dir):
-    # Read the configuration file
-    config = configparser.ConfigParser()
-    config.read(config_file)
+working_folder = 
+data_file_dir_check=
+conf_folder = 	
+src_file_dir = 	
 
-    # Connect to the S3 bucket
-    s3 = boto3.client('s3')
-    response = s3.get_object(Bucket=s3_bucket, Key=s3_key)
-    rows = response['Body'].read().decode('utf-8').split('\n')
+# Assign Parameters to variables
+country = 'JP'
+src_file_nm = sorted([f for f in os.listdir() if f.endswith('_ZXW_ULT_VAN.dat')])[0]
 
-    # Iterate through each row in the input CSV file
-    for row in csv.reader(rows):
-        # Determine the starting word of the row
-        row_starting_word = row[0].split()[0]
+# clear existing source files
+src_file_dir_check = len(os.listdir(working_folder))
+if src_file_dir_check != 0:
+    os.remove(os.path.join(working_folder, 'ULTMARC_*.txt'))
 
-        # Check if there is a configuration for the starting word
-        if row_starting_word == starting_word:
-            # Get the output filename from the configuration
-            output_filename = config[starting_word]['filename']
-            output_path = os.path.join(output_dir, output_filename)
+data_file_dir_check = len(os.listdir(data_file_dir_check))
+if data_file_dir_check != 0:
+    os.remove(os.path.join(data_file_dir_check, 'ULTMARC_*.txt'))
 
-            # Create the output file if it doesn't exist
-            if not os.path.exists(output_path):
-                with open(output_path, 'w', newline='') as outfile:
-                    writer = csv.writer(outfile)
-                    writer.writerow(row)
+# splitting file process in while loop
+start_row = 1
+end_row = sum(1 for _ in open(os.path.join(conf_folder, 'CIM_ULTMARC_FILE.conf'))) # source file split configure file
+start_column = 1
+end_column = len(open(os.path.join(conf_folder, 'CIM_ULTMARC_FILE.conf')).readline().split(','))
 
-            # Append the row to the output file
-            with open(output_path, 'a', newline='') as outfile:
-                writer = csv.writer(outfile)
-                writer.writerow(row)
-
-    # Upload generated files back to S3 bucket
-    s3_resource = boto3.resource('s3')
-    s3_bucket_resource = s3_resource.Bucket(s3_bucket)
-    for filename in os.listdir(output_dir):
-        if filename.endswith('.csv'):
-            s3_bucket_resource.upload_file(os.path.join(output_dir, filename), f'split/{filename}')
-
-default_args = {
-    'owner': 'airflow',
-    'depends_on_past': False,
-    'start_date': days_ago(1),
-}
-
-with DAG(
-    'split_csv_from_s3',
-    default_args=default_args,
-    schedule_interval=None,
-) as dag:
-    starting_words = ['StartingWord1', 'StartingWord2']
-    s3_bucket = 'my-s3-bucket'
-    s3_key = 'path/to/my/csv/file.csv'
-    config_file = 'path/to/my/config.ini'
-    output_dir = '/path/to/output/dir'
-
-    # Split CSV file for each starting word
-    for starting_word in starting_words:
-        task_id = f'split_csv_{starting_word}'
-        op = PythonOperator(
-            task_id=task_id,
-            python_callable=split_csv_from_s3,
-            op_kwargs={
-                'starting_word': starting_word,
-                's3_bucket': s3_bucket,
-                's3_key': s3_key,
-                'config_file': config_file,
-                'output_dir': output_dir,
-            },
-        )
-
-        # Upload generated files to S3 bucket
-        upload_task_id = f'upload_files_{starting_word}'
-        upload_op = S3FileTransformOperator(
-            task_id=upload_task_id,
-            source_s3_key=f'{output_dir}/{{filename}}',
-            dest_s3_key=f'split/{{filename}}',
-            replace
+while start_row <= end_row:
+    os.chdir(conf_folder)
+    with open(os.path.join(conf_folder, 'CIM_ULTMARC_FILE.conf'), 'r') as f:
+        row = f.readlines()[start_row-1] # get the row values from configure file
+        class_id = row.split(',')[0] # based on first field in file will split
+        fname = row.split(',')[1].strip() # filenames from the .conf file
+        fname_time = f"{fname}_{datetime.datetime.now().strftime('%Y%m%d%H%M')}.txt"
+        with open(os.path.join(src_file_dir, src_file_nm), 'r') as src_file:
+            with open(os.path.join(working_folder, fname_time), 'w') as dest_file:
+                for line in src_file:
+                    if line.split(',')[0] == class_id:
+                        dest_file.write(line)
+        print(f"CLASSIFICATION_ID : {class_id} THIS FILE HAS GENERATED : {fname_time}")
+        with open(os.path.join(working_folder, 'ULTMARC_FILECOUNT_SPLITS.txt'), 'a') as cnt_file:
+            cnt_value = sum(1 for line in open(os.path.join(working_folder, fname_time)))
+            cnt_file.write(f"{country},{fname_time},{cnt_value}\n")
+    start_row += 1
