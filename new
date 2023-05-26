@@ -1,0 +1,41 @@
+from datetime import datetime
+from airflow import DAG
+from airflow.operators.python_operator import PythonOperator
+
+# Define the list of dictionaries containing the parameters
+parameter_list = [
+    {"param1": "value1", "param2": "value2"},
+    {"param1": "value3", "param2": "value4"},
+    # Add more dictionaries as needed
+]
+
+# Define the function that will be executed by each task
+def process_parameters(**kwargs):
+    parameters = kwargs['params']
+    # Process the parameters here
+    print(f"Processing parameters: {parameters}")
+
+# Define the main DAG
+default_args = {
+    'start_date': datetime(2023, 1, 1),
+    'catchup': False,
+}
+
+dag = DAG('dynamic_dag', default_args=default_args, schedule_interval=None)
+
+# Create tasks dynamically based on the parameter list
+for i, parameters in enumerate(parameter_list):
+    task_id = f'task_{i+1}'
+    task = PythonOperator(
+        task_id=task_id,
+        python_callable=process_parameters,
+        op_kwargs={'params': parameters},
+        dag=dag,
+    )
+
+    # Set the task dependencies
+    if i > 0:
+        prev_task_id = f'task_{i}'
+        prev_task = dag.get_task(prev_task_id)
+        task.set_upstream(prev_task)
+
