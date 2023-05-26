@@ -1,7 +1,8 @@
 from datetime import datetime
 from airflow import DAG
-from airflow.operators.dagrun_operator import TriggerDagRunOperator
+from airflow.operators.subdag import SubDagOperator
 from airflow.operators.python_operator import PythonOperator
+from airflow.models import DagBag
 
 # Define the list of dictionaries containing the parameters
 parameter_list = [
@@ -19,6 +20,44 @@ default_args = {
 dag = DAG('dynamic_dag', default_args=default_args, schedule_interval=None)
 
 
+def create_subdag(parent_dag_name, child_dag_name, args):
+    subdag = DAG(
+        dag_id=f'{parent_dag_name}.{child_dag_name}',
+        default_args=args,
+        schedule_interval=None,
+    )
+
+    def print_success_message(**kwargs):
+        execution_date = kwargs['execution_date']
+        print(f'SubDAG {child_dag_name} completed at: {execution_date}')
+
+    success_task = PythonOperator(
+        task_id='success_task',
+        python_callable=print_success_message,
+        provide_context=True,
+        dag=subdag,
+    )
+
+    success_task
+
+    return subdag
+
+
+def trigger_subdag(parent_dag_name, child_dag_name, args, **kwargs):
+    dag_bag = DagBag()
+    if child_dag_name not in dag_bag.dags:
+        subdag = create_subdag(parent_dag_name, child_dag_name, args)
+        dag_bag.bag_dag(subdag, root_dag=dag_bag.dags[parent_dag_name])
+
+    subdag_operator = SubDagOperator(
+        task_id=child_dag_name,
+        subdag=dag_bag.dags[f'{parent_dag_name}.{child_dag_name}'],
+        dag=dag,
+    )
+
+    return subdag_operator
+
+
 def monitor_task(**kwargs):
     execution_dates = kwargs['ti'].xcom_pull(task_ids=[f'trigger_task_{i+1}' for i in range(len(parameter_list))])
     for i, execution_date in enumerate(execution_dates):
@@ -30,10 +69,12 @@ for i, parameters in enumerate(parameter_list):
     task_id = f'task_{i+1}'
     trigger_task_id = f'trigger_task_{i+1}'
 
-    trigger_task = TriggerDagRunOperator(
-        task_id=trigger_task_id,
-        trigger_dag_id='existing_dag_id',  # Specify the ID of the existing DAG you want to trigger
-        conf=parameters,  # Pass the parameters as configuration to the triggered DAG
+    trigger_task = trigger_subdag(
+        parent_dag_name='dynamic_dag',
+        child_dag_name=task_id,
+        args=default_args,
+        conf=parameters,
+        provide_context=True,
         dag=dag,
     )
 
