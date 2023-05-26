@@ -1,6 +1,7 @@
 from datetime import datetime
 from airflow import DAG
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
+from airflow.operators.python_operator import PythonOperator
 
 # Define the list of dictionaries containing the parameters
 parameter_list = [
@@ -17,6 +18,13 @@ default_args = {
 
 dag = DAG('dynamic_dag', default_args=default_args, schedule_interval=None)
 
+
+def monitor_task(**kwargs):
+    execution_dates = kwargs['ti'].xcom_pull(task_ids=[f'trigger_task_{i+1}' for i in range(len(parameter_list))])
+    for i, execution_date in enumerate(execution_dates):
+        print(f'Task {i+1} completed at: {execution_date}')
+
+
 # Create tasks dynamically based on the parameter list
 for i, parameters in enumerate(parameter_list):
     task_id = f'task_{i+1}'
@@ -29,8 +37,26 @@ for i, parameters in enumerate(parameter_list):
         dag=dag,
     )
 
-    # Set the task dependencies
-    if i > 0:
-        prev_task_id = f'trigger_task_{i}'
-        prev_task = dag.get_task(prev_task_id)
-        trigger_task.set_upstream(prev_task)
+    monitor_task >> trigger_task
+
+
+def print_success_message(**kwargs):
+    execution_dates = kwargs['ti'].xcom_pull(task_ids=[f'trigger_task_{i+1}' for i in range(len(parameter_list))])
+    print("All tasks completed successfully!")
+    for i, execution_date in enumerate(execution_dates):
+        print(f"Task {i+1} completed at: {execution_date}")
+
+
+success_task = PythonOperator(
+    task_id='success_task',
+    python_callable=print_success_message,
+    provide_context=True,
+    dag=dag,
+)
+
+for i, _ in enumerate(parameter_list):
+    task_id = f'trigger_task_{i+1}'
+    monitor_task.set_upstream(dag.get_task(task_id))
+
+monitor_task.set_downstream(success_task)
+
