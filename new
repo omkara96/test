@@ -1,103 +1,85 @@
-from datetime import datetime
-from airflow import DAG
-from airflow.operators.subdag import SubDagOperator
-from airflow.operators.python_operator import PythonOperator
-from airflow.models import DagBag
+import boto3
+import psycopg2
 
-# Define the list of dictionaries containing the parameters
-parameter_list = [
-    {"param1": "value1", "param2": "value2"},
-    {"param1": "value3", "param2": "value4"},
-    # Add more dictionaries as needed
-]
+def lambda_handler(event, context):
+    # Extract input parameters from the event
+    dsq_file_path = event['dsq_file_path']
+    curated_table_name = event['curated_table_name']
+    variable1 = event['variable1']
+    variable2 = event['variable2']
+    
+    # Fetch latest metadata time from curated table
+    latest_metadata_time = fetch_latest_metadata_time(curated_table_name)
+    
+    # Read DSQ file from S3 bucket
+    dsq_content = read_dsq_from_s3(dsq_file_path)
+    
+    # Override variables in the DSQ content
+    dsq_content = override_variables(dsq_content, variable1, variable2, latest_metadata_time)
+    
+    # Print the parameterized DSQ content
+    print(dsq_content)
+    
+    # Execute the parameterized DSQ on Redshift
+    execute_dsq_on_redshift(dsq_content)
 
-# Define the main DAG
-default_args = {
-    'start_date': datetime(2023, 1, 1),
-    'catchup': False,
-}
-
-dag = DAG('dynamic_dag', default_args=default_args, schedule_interval=None)
-
-
-def create_subdag(parent_dag_name, child_dag_name, args):
-    subdag = DAG(
-        dag_id=f'{parent_dag_name}.{child_dag_name}',
-        default_args=args,
-        schedule_interval=None,
+def fetch_latest_metadata_time(curated_table_name):
+    # Implement logic to fetch the latest metadata time from the curated table
+    # Example implementation:
+    # Connect to the Redshift cluster using psycopg2
+    conn = psycopg2.connect(
+        host='your_redshift_host',
+        port='your_redshift_port',
+        user='your_redshift_user',
+        password='your_redshift_password',
+        dbname='your_redshift_dbname'
     )
+    
+    # Execute a query to fetch the latest metadata time
+    cursor = conn.cursor()
+    query = f"SELECT MAX(metadata_time) FROM {curated_table_name};"
+    cursor.execute(query)
+    latest_metadata_time = cursor.fetchone()[0]
+    
+    # Close the cursor and connection
+    cursor.close()
+    conn.close()
+    
+    return latest_metadata_time
 
-    def print_success_message(**kwargs):
-        execution_date = kwargs['execution_date']
-        print(f'SubDAG {child_dag_name} completed at: {execution_date}')
+def read_dsq_from_s3(dsq_file_path):
+    # Create a Boto3 S3 client
+    s3_client = boto3.client('s3')
+    
+    # Read the DSQ file content from S3
+    response = s3_client.get_object(Bucket='your_bucket_name', Key=dsq_file_path)
+    dsq_content = response['Body'].read().decode('utf-8')
+    
+    return dsq_content
 
-    success_task = PythonOperator(
-        task_id='success_task',
-        python_callable=print_success_message,
-        provide_context=True,
-        dag=subdag,
+def override_variables(dsq_content, variable1, variable2, latest_metadata_time):
+    # Replace the variables in the DSQ content with the provided values
+    dsq_content = dsq_content.replace('{$variable1}', variable1)
+    dsq_content = dsq_content.replace('{$variable2}', variable2)
+    dsq_content = dsq_content.replace('{$latest_metadata_time}', latest_metadata_time)
+    
+    return dsq_content
+
+def execute_dsq_on_redshift(dsq_content):
+    # Connect to the Redshift cluster using psycopg2
+    conn = psycopg2.connect(
+        host='your_redshift_host',
+        port='your_redshift_port',
+        user='your_redshift_user',
+        password='your_redshift_password',
+        dbname='your_redshift_dbname'
     )
-
-    success_task
-
-    return subdag
-
-
-def trigger_subdag(parent_dag_name, child_dag_name, args, **kwargs):
-    dag_bag = DagBag()
-    if child_dag_name not in dag_bag.dags:
-        subdag = create_subdag(parent_dag_name, child_dag_name, args)
-        dag_bag.bag_dag(subdag, root_dag=dag_bag.dags[parent_dag_name])
-
-    subdag_operator = SubDagOperator(
-        task_id=child_dag_name,
-        subdag=dag_bag.dags[f'{parent_dag_name}.{child_dag_name}'],
-        dag=dag,
-    )
-
-    return subdag_operator
-
-
-def monitor_task(**kwargs):
-    execution_dates = kwargs['ti'].xcom_pull(task_ids=[f'trigger_task_{i+1}' for i in range(len(parameter_list))])
-    for i, execution_date in enumerate(execution_dates):
-        print(f'Task {i+1} completed at: {execution_date}')
-
-
-# Create tasks dynamically based on the parameter list
-for i, parameters in enumerate(parameter_list):
-    task_id = f'task_{i+1}'
-    trigger_task_id = f'trigger_task_{i+1}'
-
-    trigger_task = trigger_subdag(
-        parent_dag_name='dynamic_dag',
-        child_dag_name=task_id,
-        args=default_args,
-        conf=parameters,
-        provide_context=True,
-        dag=dag,
-    )
-
-    monitor_task >> trigger_task
-
-
-def print_success_message(**kwargs):
-    execution_dates = kwargs['ti'].xcom_pull(task_ids=[f'trigger_task_{i+1}' for i in range(len(parameter_list))])
-    print("All tasks completed successfully!")
-    for i, execution_date in enumerate(execution_dates):
-        print(f"Task {i+1} completed at: {execution_date}")
-
-
-success_task = PythonOperator(
-    task_id='success_task',
-    python_callable=print_success_message,
-    provide_context=True,
-    dag=dag,
-)
-
-for i, _ in enumerate(parameter_list):
-    task_id = f'trigger_task_{i+1}'
-    monitor_task.set_upstream(dag.get_task(task_id))
-
-monitor_task.set_downstream(success_task)
-
+    
+    # Execute the parameterized DSQ on Redshift
+    cursor = conn.cursor()
+    cursor.execute(dsq_content)
+    conn.commit()
+    
+    # Close the cursor and connection
+    cursor.close()
+    conn.close()
