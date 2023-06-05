@@ -1,2 +1,11 @@
-filtered_list = [max(filtered_list, key=lambda file_name: _get_s3_client(arn_role).head_object(Bucket=src_bucket, Key=f"{from_s3_prefix}/{file_name}")['LastModified'])]
+most_recent_file = max(filtered_list, key=lambda file_name: s3_client.head_object(Bucket=src_bucket, Key=f"{from_s3_prefix}/{file_name}")['LastModified'])
+    source_key = f"{from_s3_prefix}/{most_recent_file}"
+    target_key = f"{to_s3_prefix}/{most_recent_file.split('/')[-1]}"
     
+    s3_resource = boto3.resource('s3')
+    s3_resource.meta.client.copy(
+        CopySource={'Bucket': src_bucket, 'Key': source_key},
+        Bucket=dest_bucket,
+        Key=target_key
+    )
+    print("File copied successfully.")
