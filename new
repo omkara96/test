@@ -1,85 +1,39 @@
-import boto3
-import psycopg2
+SELECT T.*, S.PARENT_MNT_DT
+FROM CIM_LC_INT.PRC_ULT_ACDMC_SCTY T
+JOIN (
+    SELECT C.*, P.MNT_DT AS PARENT_MNT_DT, P.LOAD_KEY
+    FROM CIM_LC_INT.PRC_ULT_DCTR P
+    JOIN CIM_LC_PRST.PRST_ULT_ACDMC_SCTY_C C
+        ON C.PRS_CD = P.PRS_CD
+        AND C.DA_AREA_CODE = P.DA_AREA_CODE
+        AND C.DA_SOURCE_CODE = P.DA_SOURCE_CODE
+    WHERE P.MDF_CLS = 'C'
+        AND P.DA_AREA_CODE = 'pi_str_areaCode'
+        AND P.DA_SOURCE_CODE = 'pi_str_sourceCode'
+) S
+    ON S.PRS_CD = T.PRS_CD
+    AND S.ACD_SCT_CD = T.ACD_SCT_CD
+    AND S.DA_AREA_CODE = T.DA_AREA_CODE
+    AND S.DA_SOURCE_CODE = T.DA_SOURCE_CODE
+WHERE NVL(T.RSV_ACD_SCT_MNT_CLS, 'X') <> '1'
 
-def lambda_handler(event, context):
-    # Extract input parameters from the event
-    dsq_file_path = event['dsq_file_path']
-    curated_table_name = event['curated_table_name']
-    variable1 = event['variable1']
-    variable2 = event['variable2']
-    
-    # Fetch latest metadata time from curated table
-    latest_metadata_time = fetch_latest_metadata_time(curated_table_name)
-    
-    # Read DSQ file from S3 bucket
-    dsq_content = read_dsq_from_s3(dsq_file_path)
-    
-    # Override variables in the DSQ content
-    dsq_content = override_variables(dsq_content, variable1, variable2, latest_metadata_time)
-    
-    # Print the parameterized DSQ content
-    print(dsq_content)
-    
-    # Execute the parameterized DSQ on Redshift
-    execute_dsq_on_redshift(dsq_content)
+UNION ALL
 
-def fetch_latest_metadata_time(curated_table_name):
-    # Implement logic to fetch the latest metadata time from the curated table
-    # Example implementation:
-    # Connect to the Redshift cluster using psycopg2
-    conn = psycopg2.connect(
-        host='your_redshift_host',
-        port='your_redshift_port',
-        user='your_redshift_user',
-        password='your_redshift_password',
-        dbname='your_redshift_dbname'
-    )
-    
-    # Execute a query to fetch the latest metadata time
-    cursor = conn.cursor()
-    query = f"SELECT MAX(metadata_time) FROM {curated_table_name};"
-    cursor.execute(query)
-    latest_metadata_time = cursor.fetchone()[0]
-    
-    # Close the cursor and connection
-    cursor.close()
-    conn.close()
-    
-    return latest_metadata_time
-
-def read_dsq_from_s3(dsq_file_path):
-    # Create a Boto3 S3 client
-    s3_client = boto3.client('s3')
-    
-    # Read the DSQ file content from S3
-    response = s3_client.get_object(Bucket='your_bucket_name', Key=dsq_file_path)
-    dsq_content = response['Body'].read().decode('utf-8')
-    
-    return dsq_content
-
-def override_variables(dsq_content, variable1, variable2, latest_metadata_time):
-    # Replace the variables in the DSQ content with the provided values
-    dsq_content = dsq_content.replace('{$variable1}', variable1)
-    dsq_content = dsq_content.replace('{$variable2}', variable2)
-    dsq_content = dsq_content.replace('{$latest_metadata_time}', latest_metadata_time)
-    
-    return dsq_content
-
-def execute_dsq_on_redshift(dsq_content):
-    # Connect to the Redshift cluster using psycopg2
-    conn = psycopg2.connect(
-        host='your_redshift_host',
-        port='your_redshift_port',
-        user='your_redshift_user',
-        password='your_redshift_password',
-        dbname='your_redshift_dbname'
-    )
-    
-    # Execute the parameterized DSQ on Redshift
-    cursor = conn.cursor()
-    cursor.execute(dsq_content)
-    conn.commit()
-    
-    # Close the cursor and connection
-    cursor.close()
-    conn.close()
+SELECT T.*, S.PARENT_MNT_DT
+FROM CIM_LC_INT.PRC_ULT_ACDMC_SCTY T
+JOIN (
+    SELECT C.*, P.MNT_DT AS PARENT_MNT_DT, P.LOAD_KEY
+    FROM CIM_LC_INT.PRC_ULT_DCTR P
+    JOIN CIM_LC_PRST.PRST_ULT_ACDMC_SCTY_C C
+        ON C.PRS_CD = P.PRS_CD
+        AND C.DA_AREA_CODE = P.DA_AREA_CODE
+        AND C.DA_SOURCE_CODE = P.DA_SOURCE_CODE
+    WHERE P.MDF_CLS = 'C'
+        AND P.DA_AREA_CODE = 'pi_str_areaCode'
+        AND P.DA_SOURCE_CODE = 'pi_str_sourceCode'
+) S
+    ON S.PRS_CD = T.PRS_CD
+    AND S.ACD_SCT_CD = T.ACD_SCT_CD
+    AND S.DA_AREA_CODE = T.DA_AREA_CODE
+    AND S.DA_SOURCE_CODE = T.DA_SOURCE_CODE
+WHERE NVL(T.RSV_ACD_SCT_MNT_CLS, 'X') <> '1';
