@@ -1,0 +1,117 @@
+import boto3
+from botocore.exceptions import ClientError
+import re
+
+def _get_s3_client(role_arn=None):
+    """
+    Returns boto3 s3 client
+    """
+    connection = BaseHook.get_connection(input.get("aws_connection"))
+    if role_arn is None:
+        return boto3.client(
+            "s3",
+            aws_access_key_id=connection.login,
+            aws_secret_access_key=connection.password
+        )
+
+    # Assume specified role
+    stsresponse = boto3.client(
+        'sts',
+        aws_access_key_id=connection.login,
+        aws_secret_access_key=connection.password
+    ).assume_role(
+        RoleArn=role_arn,
+        RoleSessionName='newsession')
+
+    return boto3.client(
+        's3',
+        aws_access_key_id=stsresponse["Credentials"]["AccessKeyId"],
+        aws_secret_access_key=stsresponse["Credentials"]["SecretAccessKey"],
+        aws_session_token=stsresponse["Credentials"]["SessionToken"]
+    )
+
+def check_file_existence(src_bucket, from_s3_prefix, arn_role, file_pattern, most_recent_only, target_file_nm,
+                         target_file_extnsn, to_s3_prefix, dest_bucket, area_cd, source_system):
+    s3_client = _get_s3_client(arn_role)
+    print("AREA_CD             :", area_cd)
+    print("SOURCE_SYSTEM       :", source_system)
+    print("SOURCE_BUCKET       :", src_bucket)
+    print("DESTINATION_BUCKET  :", dest_bucket)
+    print("FROM_S3_PATH        :", from_s3_prefix)
+    print("TO_S3_PATH          :", to_s3_prefix)
+    print("FILE_PATTERN        :", file_pattern)
+    print("MOST_RECENT_ONLY    :", most_recent_only)
+    print("ARN_ROLE            :", arn_role)
+    print("TARGET_FILE_NAME    :", target_file_nm)
+    print("TARGET_FILE_EXTENSION:", target_file_extnsn)
+    print("TARGET_FILE_NAME    :", f"{to_s3_prefix}/{target_file_nm + today + target_file_extnsn}")
+
+    try:
+        response = s3_client.list_objects_v2(Bucket=src_bucket, Prefix=from_s3_prefix)
+        files = [obj['Key'] for obj in response['Contents'] if re.match(file_pattern, obj['Key'])]
+
+        if not files:
+            send_email_notification("No file exists that matches the provided regex pattern.")
+            return
+
+        if most_recent_only:
+            files.sort(key=lambda file_name: s3_client.head_object(Bucket=src_bucket, Key=file_name)['LastModified'])
+            files = [files[-1]]  # Get the most recent file
+
+        print("Most Recent File:", files[0])
+
+        source_key = files[0]
+        target_key = f"{to_s3_prefix}/{target_file_nm + today + target_file_extnsn}"
+
+        s3_client.copy_object(CopySource={'Bucket': src_bucket, 'Key': source_key}, Bucket=dest_bucket, Key=target_key)
+        send_email_notification(f"File copied successfully. File name: {source_key}")
+    except ClientError as e:
+        send_email_notification(f"An exception occurred. Please check file availability at the source side.\n{e}")
+
+def send_email_notification(message):
+    """
+    Sends an email notification with the provided message.
+    """
+    email_operator = EmailOperator(
+        task_id='send_email',
+        to=input['email_notification'],
+        subject='File Copy Status',
+        html_content=f'<p>{message}</p>',
+        dag=dag
+    )
+    email_operator.execute(context={})
+
+def start_file_copy(**kwargs):
+    """
+    python_callable to be called for starting file copy process
+    """
+    src_bucket = kwargs["dag_run"].conf['src_out_bucket']
+    from_s3_prefix = kwargs["dag_run"].conf['source_path']
+    arn_role = kwargs["dag_run"].conf['arn_role']
+    file_pattern = kwargs["dag_run"].conf['file_pattern']
+    most_recent_only = kwargs["dag_run"].conf['most_recent_only']
+    dest_bucket = kwargs["dag_run"].conf['des_out_bucket']
+    to_s3_prefix = kwargs["dag_run"].conf['target_path']
+    target_file_nm = kwargs["dag_run"].conf['target_file_nm']
+    target_file_extnsn = kwargs["dag_run"].conf['target_file_extnsn']
+
+    check_file_existence(src_bucket, from_s3_prefix, arn_role, file_pattern, most_recent_only, target_file_nm,
+                         target_file_extnsn, to_s3_prefix, dest_bucket, area_cd, source_system)
+
+with DAG(
+        dag_id=input['dag_id'],
+        default_args=default_args,
+        description='Copy file from one S3 bucket to another based on regex pattern',
+        schedule_interval=input['schedule_interval']
+) as dag:
+    print_task = PythonOperator(
+        task_id='print_variables',
+        python_callable=print_var
+    )
+
+    file_copy_task = PythonOperator(
+        task_id='start_file_copy',
+        python_callable=start_file_copy
+    )
+
+    print_task >> file_copy_task
