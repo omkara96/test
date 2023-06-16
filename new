@@ -1,118 +1,204 @@
-SELECT T.*
-FROM CIM_LC_INT.PRC_ULT_PRF_MDCL_FNC T
-JOIN (
-    SELECT C.*, P.MNT_DT AS PARENT_MNT_DT, P.LOAD_KEY 
-    FROM CIM_LC_INT.PRC_ULT_FCLTY P
-    JOIN CIM_LC_PRST.PRST_ULT_PRF_MDCL_FNC_C C ON 
-        C.FCL_CD = P.FCL_CD
-        AND C.DA_AREA_CODE = P.DA_AREA_CODE
-        AND C.DA_SOURCE_CODE = P.DA_SOURCE_CODE
-    WHERE P.MDF_CLSS = 'C'
-        AND P.DA_AREA_CODE = 'pi_str_areaCode'
-        AND P.DA_SOURCE_CODE = 'pi_str_sourceCode'
-) S ON (
-    S.FCL_CD = T.FCL_CD 
-    AND S.DA_AREA_CODE = T.DA_AREA_CODE
-    AND S.DA_SOURCE_CODE = T.DA_SOURCE_CODE
-)
-WHERE T.RSV_ADD_DLT_CLS <> '1' OR T.RSV_ADD_DLT_CLS IS NULL
+######################################################################################################################################################################################################################
+# Imports
+######################################################################################################################################################################################################################
+import io
+import os
+import re
+import sys
+import boto3
+import json
+import csv
+import pandas as pd
+from airflow import DAG
+from airflow.operators.python_operator import PythonOperator
+from airflow.operators.email_operator import EmailOperator
+from airflow.operators.dummy import DummyOperator
+from airflow.utils.db import create_session
+from airflow.models import Variable
+from airflow.utils.dates import days_ago
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.hooks.base_hook import BaseHook
+from airflow.utils.email import send_email
+from datetime import datetime, timedelta, date
+import time
 
-UNION ALL
+######################################################################################################################################################################################################################
+# DAG Description
+######################################################################################################################################################################################################################
+# Created by: omkar
+# Description: This DAG will copy a file from one S3 bucket to another S3 bucket based on the provided regex pattern.
+# The most recent file that matches the pattern will be copied to the target bucket.
+# All parameters are mandatory to run the DAG. Refer to the sample parameters below:
+# Sample Parameter = {
+#     "des_out_bucket": "com-merck-hhiejp-sit-backbone",
+#     "file_pattern": "[0-9]*_JSYOK_ARAIGAE_HN.txt",
+#     "geo_code": "JP",
+#     "most_recent_only": "True",
+#     "source_path": "inbound",
+#     "source_system": "I125",
+#     "src_out_bucket": "com-merck-ghhapcim-dev-fujitsu",
+#     "target_path": "Inbound/fujitsu_125/JP/SourceFiles",
+#     "arn_role": "arn:aws:iam::045149024596:role/hhie-glue-jp-role",
+#     "target_file_nm": "JSYOK_ARAIGAE_HN_",
+#     "target_file_extnsn": ".txt"
+# }
+######################################################################################################################################################################################################################
+# Default workflow arguments
+######################################################################################################################################################################################################################
 
-SELECT 
-    S.LYT_CLS,
-    S.RCR_ID,
-    S.FCL_CD,
-    S.FCL_CD_RSV,
-    S.MDF_CLS,
-    '1',
-    S.PARENT_MNT_DT,
-    S.RSV_TRN_DT,
-    S.INF_DT,
-    S.INF_HMP_ADD,
-    S.HSP_FRM_FLG,
-    S.EXT_PRS_FLG,
-    S.CLN_TRL_EXC_FLG,
-    S.CLN_TRL_EXC_CNT_CNT,
-    S.CLN_TRL_EXC_TRM_STR_DT,
-    S.CLN_TRL_EXC_TRM_END_DT,
-    S.HLD_FCL_EQP_FLG,
-    S.CRS_DSS_TRT_CNT_FLG,
-    S.CRS_SHR_STY_OPR_FLG,
-    S.CRS_SPC_OUT_FLG,
-    S.RGN_MDC_LNK_CNT_FLG,
-    S.RGN_MDC_LNK_PSS_FLG,
-    S.HSP_LNK_SPP,
-    S.ORD_SYS_EXS_FLG,
-    S.ORD_SYS_CHC,
-    S.ORD_SYS_PRS,
-    S.ORD_SYS_RSV,
-    S.ICD_CD_USG_FLG,
-    S.ELC_HLT_RCR_FLG,
-    S.FLT_EMP_FLG,
-    S.FLT_EMP_CNT,
-    S.AVR_PC_GNR_PTN_CNT,
-    S.AVR_PC_MDC_TRT_PTN_CNT,
-    S.AVR_PC_MDC_TRT_CR_PTN_CNT,
-    S.AVR_PC_MDC_TRT_NRS_PTN_CNT,
-    S.AVR_PC_MNT_PTN_CNT,
-    S.AVR_PC_TB_PTN_CNT,
-    S.AVR_PC_INF_PTN_CNT,
-    S.AVR_PC_TTL_PTN_CNT,
-    S.AVR_PC_TRM_STR_DT,
-    S.AVR_PC_TRM_END_DT,
-    S.AVR_PC_OTP_CNT,
-    S.AVR_PC_OTP_TRM_STR_DT,
-    S.AVR_PC_OTP_TRM_END_DT,
-    S.AVR_PC_HMP_CNT,
-    S.AVR_PC_HMP_TRM_STR_DT,
-    S.AVR_PC_HMP_TRM_END_DT,
-    S.RNN_PC_GNR_PTN_CNT,
-    S.RNN_PC_MDC_TRT_PTN_CNT,
-    S.RNN_PC_MDC_TRT_CR_PTN_CNT,
-    S.RNN_PC_MDC_TRT_NRS_PTN_CNT,
-    S.RNN_PC_MNT_PTN_CNT,
-    S.RNN_PC_TB_PTN_CNT,
-    S.RNN_PC_INF_PTN_CNT,
-    S.RNN_PC_TTL_PTN_CNT,
-    S.RNN_PC_TRM_STR_DT,
-    S.RNN_PC_TRM_END_DT,
-    S.RNN_PC_OTP_CNT,
-    S.RNN_PC_OTP_TRM_STR_DT,
-    S.RNN_PC_OTP_TRM_END_DT,
-    S.RNN_PC_HMP_CNT,
-    S.RNN_PC_HMP_TRM_STR_DT,
-    S.RNN_PC_HMP_TRM_END_DT,
-    S.AVR_HD_GNR_PTN_CNT,
-    S.AVR_HD_MDC_TRT_PTN_CNT,
-    S.AVR_HD_MDC_TRT_CR_PTN_CNT,
-    S.AVR_HD_MDC_TRT_NRS_PTN_CNT,
-    S.AVR_HD_MNT_PTN_CNT,
-    S.AVR_HD_TB_PTN_CNT,
-    S.AVR_HD_INF_PTN_CNT,
-    S.AVR_HD_TTL_PTN_CNT,
-    S.AVR_HD_TRM_STR_DT,
-    S.AVR_HD_TRM_END_DT,
-    S.SRC_LOAD_BATCH_ID,
-    S.CRTN_ID,
-    S.SYS_CRTN_DT_TM,
-    S.LAST_UPDT_ID,
-    S.SYS_LAST_UPDT_DT_TM,
-    S.MDM_DMN_GEO_CD,
-    S.INFO_SRC_CD,
-    S.INFO_SRC_OBJ_NM,
-    S.LOAD_KEY,
-    'D',
-    S.DA_SOURCE_CODE,
-    S.DA_AREA_CODE
-FROM (
-    SELECT C.*, P.MNT_DT AS PARENT_MNT_DT, P.LOAD_KEY 
-    FROM CIM_LC_INT.PRC_ULT_FCLTY P
-    JOIN CIM_LC_PRST.PRST_ULT_PRF_MDCL_FNC_C C ON 
-        C.FCL_CD = P.FCL_CD
-        AND C.DA_AREA_CODE = P.DA_AREA_CODE
-        AND C.DA_SOURCE_CODE = P.DA_SOURCE_CODE
-    WHERE P.MDF_CLSS = 'C'
-        AND P.DA_AREA_CODE = 'pi_str_areaCode'
-        AND P.DA_SOURCE_CODE = 'pi_str_sourceCode'
-) S;
+input = {
+    'dag_id': Variable.get("airflow_region_1") + "-" + Variable.get("aws_environment_code") + "-JP-DnA-S32S3_CROSS_BKT_FILE_CPY",
+    'aws_connection': Variable.get("aws_connection_1"),
+    'aws_region_name': Variable.get("aws_region"),
+    'email_notification': ['omkar.varma@merck.com', 'jp_hhie_dia_job@merck.com'],
+    'start_date': None,
+    'schedule_interval': None,
+    'retry_count': -1,
+    'sleep_time': 60
+}
+common_scripts_path = Variable.get("common_scripts_path")
+
+today = date.today().strftime('%Y%m%d')
+
+default_args = {
+    'owner': 'airflow',
+    'start_date': datetime.strptime(input.get('start_date'), '%Y-%m-%d %H:%M:%S') if input.get(
+        'start_date') else days_ago(1),
+    'email_on_failure': True,
+    'email': input['email_notification'],
+    'wait_for_downstream': True
+}
+
+def print_var():
+    """
+    Prints airflow variables to console log
+    """
+    with create_session() as session:
+        airflow_vars = {var.key: var.val for var in session.query(Variable)}
+        print(airflow_vars)
+
+def _get_s3_client(role_arn: str):
+    """
+    Returns boto3 s3 client
+    """
+    connection = BaseHook.get_connection(input.get("aws_connection"))
+    if role_arn is None:
+        return boto3.client(
+            "s3",
+            aws_access_key_id=connection.login,
+            aws_secret_access_key=connection.password
+        )
+
+    # Assume specified role
+    stsresponse = boto3.client(
+        'sts',
+        aws_access_key_id=connection.login,
+        aws_secret_access_key=connection.password
+    ).assume_role(
+        RoleArn=role_arn,
+        RoleSessionName='newsession')
+
+    return boto3.client(
+        's3',
+        aws_access_key_id=stsresponse["Credentials"]["AccessKeyId"],
+        aws_secret_access_key=stsresponse["Credentials"]["SecretAccessKey"],
+        aws_session_token=stsresponse["Credentials"]["SessionToken"]
+    )
+
+def check_file_existence(src_bucket, from_s3_prefix, arn_role, file_pattern, most_recent_only, target_file_nm,
+                         target_file_extnsn, to_s3_prefix, dest_bucket, area_cd, source_system):
+    s3_client = _get_s3_client(arn_role)
+    print("AREA_CD             :", area_cd)
+    print("SOURCE_SYSTEM       :", source_system)
+    print("SOURCE_BUCKET       :", src_bucket)
+    print("DESTINATION_BUCKET  :", dest_bucket)
+    print("FROM_S3_PATH        :", from_s3_prefix)
+    print("TO_S3_PATH          :", to_s3_prefix)
+    print("FILE_PATTERN        :", file_pattern)
+    print("MOST_RECENT_ONLY    :", most_recent_only)
+    print("ARN_ROLE            :", arn_role)
+    print("TARGET_FILE_NAME    :", target_file_nm)
+    print("TARGET_FILE_EXTENSION:", target_file_extnsn)
+    print("TARGET_FILE_NAME    :", f"{to_s3_prefix}/{target_file_nm + today + target_file_extnsn}")
+
+    # Retrieve all objects in the source bucket
+    paginator = s3_client.get_paginator('list_objects_v2')
+    response_iterator = paginator.paginate(Bucket=src_bucket, Prefix=from_s3_prefix)
+    files = []
+    for response in response_iterator:
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                files.append(obj['Key'])
+
+    # Filter the files based on the provided regex pattern
+    regex = re.compile(file_pattern)
+    filtered_list = list(filter(regex.match, files))
+
+    if not filtered_list:
+        print("No file exists that matches the provided regex pattern.")
+        exit(1)
+
+    if most_recent_only:
+        # Find the most recent file from the filtered list based on LastModified timestamp
+        most_recent_file = max(filtered_list,
+                               key=lambda file_name: s3_client.head_object(Bucket=src_bucket,
+                                                                            Key=f"{from_s3_prefix}/{file_name}")[
+                                   'LastModified'])
+        filtered_list = [most_recent_file]
+
+    print("Most Recent File:", filtered_list[0])
+
+    source_key = f"{from_s3_prefix}/{filtered_list[0]}"
+    target_key = f"{to_s3_prefix}/{target_file_nm + today + target_file_extnsn}"
+
+    try:
+        s3_client.copy_object(CopySource={'Bucket': src_bucket, 'Key': source_key}, Bucket=dest_bucket, Key=target_key)
+        print("File copied successfully.")
+    except Exception as e:
+        print("An exception occurred. Please check file availability at the source side.")
+        print(e)
+
+def start_file_copy(**kwargs):
+    """
+    python_callable for file validation task
+    """
+    area_cd = kwargs["dag_run"].conf['geo_code']
+    source_system = kwargs["dag_run"].conf['source_system']
+    src_bucket = kwargs["dag_run"].conf['src_out_bucket']
+    from_s3_prefix = kwargs["dag_run"].conf['source_path']
+    arn_role = kwargs["dag_run"].conf['arn_role']
+    file_pattern = kwargs["dag_run"].conf['file_pattern']
+    most_recent_only = kwargs["dag_run"].conf['most_recent_only']
+    dest_bucket = kwargs["dag_run"].conf['des_out_bucket']
+    to_s3_prefix = kwargs["dag_run"].conf['target_path']
+    target_file_nm = kwargs["dag_run"].conf['target_file_nm']
+    target_file_extnsn = kwargs["dag_run"].conf['target_file_extnsn']
+
+    check_file_existence(src_bucket, from_s3_prefix, arn_role, file_pattern, most_recent_only, target_file_nm,
+                         target_file_extnsn, to_s3_prefix, dest_bucket, area_cd, source_system)
+
+with DAG(
+        dag_id=input['dag_id'],
+        default_args=default_args,
+        description='Copy file from one S3 bucket to another based on regex pattern',
+        schedule_interval=input['schedule_interval']
+) as dag:
+    print_task = PythonOperator(
+        task_id='print_variables',
+        python_callable=print_var
+    )
+
+    file_copy_task = PythonOperator(
+        task_id='start_file_copy',
+        python_callable=start_file_copy
+    )
+
+    email_task = EmailOperator(
+        task_id='send_email',
+        to=input['email_notification'],
+        subject='File Copy Status',
+        html_content='<h3>File Copy Complete</h3>',
+        provide_context=True
+    )
+
+    print_task >> file_copy_task >> email_task
