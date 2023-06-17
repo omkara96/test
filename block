@@ -1,0 +1,11 @@
+    paginator = s3_client.get_paginator('list_objects_v2')
+    response_iterator = paginator.paginate(Bucket=src_bucket, Prefix=from_s3_prefix)
+    files = []
+    for response in response_iterator:
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                files.append(obj['Key'])
+
+    # Filter the files based on the provided regex pattern
+    regex = re.compile(file_pattern)
+    filtered_list = list(filter(regex.match, files))
