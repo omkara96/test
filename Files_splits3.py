@@ -1,68 +1,64 @@
-import boto3
-import csv
-import configparser
-import os
-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
-from airflow import DAG
-from airflow.operators.python_operator import PythonOperator
-from airflow.utils.dates import days_ago
-
-def split_csv_from_s3(starting_word, s3_bucket, s3_key, config_file):
-    # Read the configuration file
-    config = configparser.ConfigParser()
-    config.read(config_file)
-
-    # Connect to the S3 bucket
-    s3 = boto3.client('s3')
-    response = s3.get_object(Bucket=s3_bucket, Key=s3_key)
-    rows = response['Body'].read().decode('utf-8').split('\n')
-
-    # Iterate through each row in the input CSV file
-    for row in csv.reader(rows):
-        # Determine the starting word of the row
-        row_starting_word = row[0].split()[0]
-
-        # Check if there is a configuration for the starting word
-        if row_starting_word == starting_word:
-            # Get the output filename from the configuration
-            output_filename = config[starting_word]['filename']
-
-            # Create the output file if it doesn't exist
-            if not os.path.exists(output_filename):
-                with open(output_filename, 'w', newline='') as outfile:
-                    writer = csv.writer(outfile)
-                    writer.writerow(row)
-
-            # Append the row to the output file
-            with open(output_filename, 'a', newline='') as outfile:
-                writer = csv.writer(outfile)
-                writer.writerow(row)
-
-default_args = {
-    'owner': 'airflow',
-    'depends_on_past': False,
-    'start_date': days_ago(1),
-}
-
-with DAG(
-    'split_csv_from_s3',
-    default_args=default_args,
-    schedule_interval=None,
-) as dag:
-    starting_words = ['StartingWord1', 'StartingWord2']
-    s3_bucket = 'my-s3-bucket'
-    s3_key = 'path/to/my/csv/file.csv'
-    config_file = 'path/to/my/config.ini'
-
-    for starting_word in starting_words:
-        task_id = f'split_csv_{starting_word}'
-        op = PythonOperator(
-            task_id=task_id,
-            python_callable=split_csv_from_s3,
-            op_kwargs={
-                'starting_word': starting_word,
-                's3_bucket': s3_bucket,
-                's3_key': s3_key,
-                'config_file': config_file,
-            },
-        )
+INSERT INTO YourNewTable (
+    LYT_CLS,
+    RCR_ID,
+    PRS_CD,
+    PRS_CD_RSV,
+    MDF_CLS,
+    ACD_SCT_CD,
+    RSV_ACD_SCT_MNT_CLS,
+    MNT_DT,
+    RSV_TRN_DT_VN,
+    ACD_SCT_YR,
+    SRC_LOAD_BATCH_ID,
+    CRTN_ID,
+    SYS_CRTN_DT_TM,
+    LAST_UPDT_ID,
+    SYS_LAST_UPDT_DT_TM,
+    MDM_DMN_GEO_CD,
+    INFO_SRC_CD,
+    INFO_SRC_OBJ_NM,
+    LOAD_KEY,
+    OPERATION_FLAG,
+    DA_SOURCE_CODE,
+    DA_AREA_CODE
+)
+SELECT
+    S.LYT_CLS,
+    S.RCR_ID,
+    S.PRS_CD,
+    S.PRS_CD_RSV,
+    S.MDF_CLS,
+    S.ACD_SCT_CD,
+    '1',
+    S.PARENT_MNT_DT,
+    S.RSV_TRN_DT_VN,
+    S.ACD_SCT_YR,
+    S.SRC_LOAD_BATCH_ID,
+    S.CRTN_ID,
+    S.SYS_CRTN_DT_TM,
+    S.LAST_UPDT_ID,
+    S.SYS_LAST_UPDT_DT_TM,
+    S.MDM_DMN_GEO_CD,
+    S.INFO_SRC_CD,
+    S.INFO_SRC_OBJ_NM,
+    S.LOAD_KEY,
+    'D',
+    S.DA_SOURCE_CODE,
+    S.DA_AREA_CODE
+FROM
+    CIM_LC_INT.PRC_ULT_DCTR P
+    JOIN CIM_LC_PRST.PRST_ULT_ACDMC_SCTY_C C
+        ON C.PRS_CD = P.PRS_CD
+        AND C.DA_AREA_CODE = P.DA_AREA_CODE
+        AND C.DA_SOURCE_CODE = P.DA_SOURCE_CODE
+    JOIN CIM_LC_INT.PRC_ULT_ACDMC_SCTY T
+        ON S.PRS_CD = T.PRS_CD
+        AND S.ACD_SCT_CD = T.ACD_SCT_CD
+        AND S.DA_AREA_CODE = T.DA_AREA_CODE
+        AND S.DA_SOURCE_CODE = T.DA_SOURCE_CODE
+WHERE
+    P.MDF_CLS = 'C'
+    AND P.DA_AREA_CODE = 'pi_str_areaCode'
+    AND P.DA_SOURCE_CODE = 'pi_str_sourceCode'
+    AND (NVL(T.RSV_ACD_SCT_MNT_CLS, 'X') <> '1');
+ 
