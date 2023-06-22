@@ -1,23 +1,26 @@
 from datetime import datetime
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
-from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+import boto3
 from airflow.operators.email_operator import EmailOperator
 
 def move_files_to_s3(src_dir, destination_dir):
     # Connect to S3
-    s3_hook = S3Hook()
+    s3_client = boto3.client('s3')
+
+    # List objects in the source directory
+    response = s3_client.list_objects_v2(Bucket='your_bucket_name', Prefix=src_dir)
 
     # Get the list of files in the source directory
-    file_list = s3_hook.list_keys(bucket_name='your_bucket_name', prefix=src_dir)
+    file_list = [obj['Key'] for obj in response.get('Contents', [])]
 
     # Move each file to the destination directory
     for file_key in file_list:
         source_key = f'{src_dir}/{file_key}'
         destination_key = f'{destination_dir}/{file_key}'
-        s3_hook.copy_object(source_bucket_name='your_bucket_name', source_bucket_key=source_key,
-                            dest_bucket_name='your_bucket_name', dest_bucket_key=destination_key)
-        s3_hook.delete_objects(bucket='your_bucket_name', keys=[source_key])
+        s3_client.copy_object(Bucket='your_bucket_name', CopySource={'Bucket': 'your_bucket_name', 'Key': source_key},
+                              Key=destination_key)
+        s3_client.delete_object(Bucket='your_bucket_name', Key=source_key)
 
     # Send an email with the list of moved files
     email_subject = 'Files Archived'
