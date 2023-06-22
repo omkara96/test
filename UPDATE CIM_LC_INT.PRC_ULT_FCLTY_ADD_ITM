@@ -1,0 +1,99 @@
+INSERT INTO CIM_LC_INT.PRC_ULT_FCLTY_ADD_ITM
+(
+    LYT_CLS,
+    RCR_ID,
+    FCL_CD,
+    FCL_CD_RSV,
+    MDF_CLS,
+    RSV_ADD_DLT_CLS,
+    MNT_DT,
+    RSV_TRN_DT,
+    DPC_TRG_HSP_FLG,
+    DPC_TRG_HSP_ASS_DT,
+    DPC_TRG_HSP_CNC_DT,
+    ...
+    -- Include all remaining columns here
+    ...
+    PLC_MDC_CLS_10,
+    PLC_MDC_CD_11,
+    PLC_MDC_CLS_11,
+    PLC_MDC_CD_12,
+    ...
+    -- Include all remaining columns here
+    ...
+    PLC_MDC_CLS_40,
+    PLC_MDC_CD_41,
+    PLC_MDC_CLS_41,
+    PLC_MDC_CD_42,
+    PLC_MDC_CLS_42
+)
+SELECT
+    C.LYT_CLS,
+    C.RCR_ID,
+    C.FCL_CD,
+    C.FCL_CD_RSV,
+    C.MDF_CLS,
+    C.RSV_ADD_DLT_CLS,
+    P.MNT_DT AS MNT_DT,
+    C.RSV_TRN_DT,
+    C.DPC_TRG_HSP_FLG,
+    C.DPC_TRG_HSP_ASS_DT,
+    C.DPC_TRG_HSP_CNC_DT,
+    ...
+    -- Include all remaining columns here
+    ...
+    C.PLC_MDC_CLS_10,
+    C.PLC_MDC_CD_11,
+    C.PLC_MDC_CLS_11,
+    C.PLC_MDC_CD_12,
+    ...
+    -- Include all remaining columns here
+    ...
+    C.PLC_MDC_CLS_40,
+    C.PLC_MDC_CD_41,
+    C.PLC_MDC_CLS_41,
+    C.PLC_MDC_CD_42,
+    C.PLC_MDC_CLS_42
+FROM CIM_LC_INT.PRC_ULT_FCLTY P
+JOIN CIM_LC_PRST.PRST_ULT_FCLTY_ADD_ITM_C C
+    ON C.FCL_CD = P.FCL_CD
+        AND C.DA_AREA_CODE = P.DA_AREA_CODE
+        AND C.DA_SOURCE_CODE = P.DA_SOURCE_CODE
+WHERE P.MDF_CLSS = 'C'
+    AND P.DA_AREA_CODE = 'pi_str_areaCode'
+    AND P.DA_SOURCE_CODE = 'pi_str_sourceCode'
+    AND NOT EXISTS (
+        SELECT 1
+        FROM CIM_LC_INT.PRC_ULT_FCLTY_ADD_ITM T
+        WHERE T.FCL_CD = C.FCL_CD
+            AND T.DA_AREA_CODE = C.DA_AREA_CODE
+            AND T.DA_SOURCE_CODE = C.DA_SOURCE_CODE
+    );
+
+
+----
+
+UPDATE CIM_LC_INT.PRC_ULT_FCLTY_ADD_ITM
+SET
+    RSV_ADD_DLT_CLS = '1',
+    OPERATION_FLAG = 'D',
+    MNT_DT = S.PARENT_MNT_DT
+FROM (
+    SELECT
+        C.FCL_CD,
+        C.DA_AREA_CODE,
+        C.DA_SOURCE_CODE,
+        P.MNT_DT AS PARENT_MNT_DT
+    FROM CIM_LC_INT.PRC_ULT_FCLTY P
+    JOIN CIM_LC_PRST.PRST_ULT_FCLTY_ADD_ITM_C C
+        ON C.FCL_CD = P.FCL_CD
+            AND C.DA_AREA_CODE = P.DA_AREA_CODE
+            AND C.DA_SOURCE_CODE = P.DA_SOURCE_CODE
+    WHERE P.MDF_CLSS = 'C'
+        AND P.DA_AREA_CODE = 'pi_str_areaCode'
+        AND P.DA_SOURCE_CODE = 'pi_str_sourceCode'
+) S
+WHERE CIM_LC_INT.PRC_ULT_FCLTY_ADD_ITM.FCL_CD = S.FCL_CD
+    AND CIM_LC_INT.PRC_ULT_FCLTY_ADD_ITM.DA_AREA_CODE = S.DA_AREA_CODE
+    AND CIM_LC_INT.PRC_ULT_FCLTY_ADD_ITM.DA_SOURCE_CODE = S.DA_SOURCE_CODE
+    AND CIM_LC_INT.PRC_ULT_FCLTY_ADD_ITM.OPERATION_FLAG != 'D';
