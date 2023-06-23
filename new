@@ -1,9 +1,21 @@
-try:
-        s3_client.head_object(Bucket=bucket_name, Key=file_key)
-        return True
-    except ClientError as e:
-        if e.response['Error']['Code'] == '404':
-            return False
-        else:
-            # Handle other exceptions
-            return False
+UPDATE HHIE_PRC.p3001_001_ult_acdmc_scty
+SET
+    RSV_ACD_SCT_MNT_CLS = '1',
+    MNT_DT = (
+        SELECT MAX(P.MNT_DT) AS PARENT_MNT_DT
+        FROM HHIE_PRC.p3001_006_ult_dctr P
+        WHERE P.PRS_CD = HHIE_PRC.p3001_001_ult_acdmc_scty.PRS_CD
+            AND P.meta__cntry_cd = HHIE_PRC.p3001_001_ult_acdmc_scty.meta__cntry_cd
+        GROUP BY P.PRS_CD, P.meta__cntry_cd
+    )
+WHERE
+    PRS_CD IN (
+        SELECT P.PRS_CD
+        FROM HHIE_PRC.p3001_006_ult_dctr P
+        JOIN HHIE_INT.c3001_001_ult_acdmc_scty C ON C.PRS_CD = P.PRS_CD
+            AND C.DA_AREA_CODE = P.meta__cntry_cd
+        WHERE P.MDF_CLS = 'C'
+            AND P.meta__cntry_cd = 'JP'
+            AND P.meta__source_id = 'ULTMARC_3001'
+    )
+    AND RSV_ACD_SCT_MNT_CLS <> '1';
