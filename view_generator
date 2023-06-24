@@ -1,0 +1,36 @@
+def create_view(table_names, view_names, grant_statements, where_conditions):
+    for i in range(len(table_names)):
+        table_name = table_names[i]
+        view_name = view_names[i]
+        grant_statement = grant_statements[i]
+        where_condition = where_conditions[i]
+
+        # Generating the view definition
+        view_definition = f"""
+            DROP VIEW IF EXISTS {view_name};
+            CREATE OR REPLACE VIEW {view_name} AS
+            SELECT *
+            FROM {table_name}
+            WHERE {where_condition};
+            {grant_statement.replace("##{view name}", view_name)};
+        """
+
+        # Saving the view definition to a file
+        file_name = f"{view_name}.sql"
+        with open(file_name, 'w') as file:
+            file.write(view_definition)
+
+        print(f"View '{view_name}' created and saved as '{file_name}'.")
+
+
+# Example usage
+table_names = ['table1', 'table2', 'table3']
+view_names = ['view1', 'view2', 'view3']
+grant_statements = [
+    "GRANT SELECT ON #{view name} TO user1;",
+    "GRANT SELECT, INSERT ON #{view name} TO user2;",
+    "GRANT ALL PRIVILEGES ON #{view name} TO user3;"
+]
+where_conditions = ['column1 = 1', 'column2 = "value"', 'column3 IS NOT NULL']
+
+create_view(table_names, view_names, grant_statements, where_conditions)
