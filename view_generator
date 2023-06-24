@@ -2,8 +2,17 @@ def create_view(table_names, view_names, grant_statements, where_conditions):
     for i in range(len(table_names)):
         table_name = table_names[i]
         view_name = view_names[i]
-        grant_statement = grant_statements[i]
-        where_condition = where_conditions[i]
+
+        # Handling varying lengths for where_conditions and grant_statements
+        if i < len(where_conditions):
+            where_condition = where_conditions[i]
+        else:
+            where_condition = "1=1"  # Default condition if not provided
+
+        if i < len(grant_statements):
+            grant_statement = grant_statements[i]
+        else:
+            grant_statement = ""  # Default grant statement if not provided
 
         # Generating the view definition
         view_definition = f"""
@@ -31,6 +40,6 @@ grant_statements = [
     "GRANT SELECT, INSERT ON #{view name} TO user2;",
     "GRANT ALL PRIVILEGES ON #{view name} TO user3;"
 ]
-where_conditions = ['column1 = 1', 'column2 = "value"', 'column3 IS NOT NULL']
+where_conditions = ['column1 = 1', 'column2 = "value"']
 
 create_view(table_names, view_names, grant_statements, where_conditions)
