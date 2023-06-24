@@ -7,12 +7,12 @@ def create_view(table_names, view_names, grant_statements, where_conditions):
         if i < len(where_conditions):
             where_condition = where_conditions[i]
         else:
-            where_condition = "1=1"  # Default condition if not provided
+            where_condition = where_conditions[-1]  # Use the last condition if not provided
 
         if i < len(grant_statements):
             grant_statement = grant_statements[i]
         else:
-            grant_statement = ""  # Default grant statement if not provided
+            grant_statement = grant_statements[-1]  # Use the last grant statement if not provided
 
         # Generating the view definition
         view_definition = f"""
@@ -41,5 +41,12 @@ grant_statements = [
     "GRANT ALL PRIVILEGES ON #{view name} TO user3;"
 ]
 where_conditions = ['column1 = 1', 'column2 = "value"']
+
+# Check if all grant statements and conditions are present
+if len(grant_statements) < len(view_names):
+    grant_statements += [grant_statements[-1]] * (len(view_names) - len(grant_statements))
+
+if len(where_conditions) < len(view_names):
+    where_conditions += [where_conditions[-1]] * (len(view_names) - len(where_conditions))
 
 create_view(table_names, view_names, grant_statements, where_conditions)
