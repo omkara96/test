@@ -1,28 +1,19 @@
-def create_view(table_names, view_names, grant_statements, where_conditions):
-    for i in range(len(table_names)):
+def create_view(table_names, view_names, grant_statements, where_condition):
+    # Generating the view definition
+    for i in range(len(view_names)):
         table_name = table_names[i]
         view_name = view_names[i]
 
-        # Handling varying lengths for where_conditions and grant_statements
-        if i < len(where_conditions):
-            where_condition = where_conditions[i]
-        else:
-            where_condition = where_conditions[-1]  # Use the last condition if not provided
-
-        if i < len(grant_statements):
-            grant_statement = grant_statements[i]
-        else:
-            grant_statement = grant_statements[-1]  # Use the last grant statement if not provided
-
-        # Generating the view definition
         view_definition = f"""
             DROP VIEW IF EXISTS {view_name};
             CREATE OR REPLACE VIEW {view_name} AS
             SELECT *
             FROM {table_name}
             WHERE {where_condition};
-            {grant_statement.replace("##{view name}", view_name)};
         """
+
+        for grant_statement in grant_statements:
+            view_definition += f"{grant_statement.replace('##{view name}', view_name)}\n"
 
         # Saving the view definition to a file
         file_name = f"{view_name}.sql"
@@ -40,13 +31,6 @@ grant_statements = [
     "GRANT SELECT, INSERT ON #{view name} TO user2;",
     "GRANT ALL PRIVILEGES ON #{view name} TO user3;"
 ]
-where_conditions = ['column1 = 1', 'column2 = "value"']
+where_condition = 'column1 = 1'
 
-# Check if all grant statements and conditions are present
-if len(grant_statements) < len(view_names):
-    grant_statements += [grant_statements[-1]] * (len(view_names) - len(grant_statements))
-
-if len(where_conditions) < len(view_names):
-    where_conditions += [where_conditions[-1]] * (len(view_names) - len(where_conditions))
-
-create_view(table_names, view_names, grant_statements, where_conditions)
+create_view(table_names, view_names, grant_statements, where_condition)
