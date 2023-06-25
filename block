@@ -20,3 +20,5 @@ find /path/to/folder -type f -exec sh -c 'mv "$0" "${0//CURR/HIST}"' {} \;
 
 
 find /path/to/folder -type f -exec rename 'y/a-z/A-Z/' {} +
+
+for file in /path/to/folder/*; do mv "$file" "${file^^}"; done
