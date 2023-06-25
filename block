@@ -13,3 +13,5 @@ ORDER BY viewname;
 
 
 ^(?!.*hhie_int).*\.
+
+find /path/to/folder -type f -exec rename 's/CURR/HIST/' {} \;
