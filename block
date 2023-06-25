@@ -1,10 +1,5 @@
-#!/bin/bash
-index=1
-find /path/to/directory -type f -name "FILENAME" | while read -r file; do
-    newname=$(basename "$file" | tr '[:upper:]' '[:lower:]')
-    extension="${newname##*.}"
-    filename="${newname%.*}"
-    newname="${filename}_$index.$extension"
-    mv "$file" "$(dirname "$file")/$newname"
-    index=$((index+1))
-done
+SELECT v.viewname AS view_name, v.viewdef AS view_definition
+FROM pg_namespace n
+JOIN pg_views v ON n.oid = v.schemaname::regnamespace AND n.nspname = 'your_schema_name'
+WHERE v.viewname NOT LIKE 'pg_%' AND v.viewname NOT LIKE 'information_schema%'
+ORDER BY v.viewname;
