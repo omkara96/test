@@ -11,3 +11,5 @@ FROM pg_views
 WHERE schemaname = 'your_schema_name'
 ORDER BY viewname;
 
+
+(.*\.)|(.*Skip.*\n)
