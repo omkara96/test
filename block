@@ -12,4 +12,4 @@ WHERE schemaname = 'your_schema_name'
 ORDER BY viewname;
 
 
-(.*\.)|(.*Skip.*\n)
+^(?!.*hhie_int).*\.
