@@ -17,3 +17,6 @@ ORDER BY viewname;
 find /path/to/folder -type f -exec rename 's/CURR/HIST/' {} \;
 
 find /path/to/folder -type f -exec sh -c 'mv "$0" "${0//CURR/HIST}"' {} \;
+
+
+find /path/to/folder -type f -exec rename 'y/a-z/A-Z/' {} +
