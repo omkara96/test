@@ -3,3 +3,11 @@ FROM pg_namespace n
 JOIN pg_views v ON n.oid = v.schemaname::regnamespace AND n.nspname = 'your_schema_name'
 WHERE v.viewname NOT LIKE 'pg_%' AND v.viewname NOT LIKE 'information_schema%'
 ORDER BY v.viewname;
+
+
+
+SELECT viewname AS view_name, definition AS view_definition
+FROM pg_views
+WHERE schemaname = 'your_schema_name'
+ORDER BY viewname;
+
