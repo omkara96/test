@@ -1,0 +1,54 @@
+import boto3
+
+def get_secret_value(secret_name, access_key_id=None, secret_access_key=None, role_arn=None):
+    """
+    Retrieves secret value from AWS Secrets Manager
+    """
+    session = boto3.Session(
+        aws_access_key_id=access_key_id,
+        aws_secret_access_key=secret_access_key
+    )
+
+    client = session.client('secretsmanager')
+
+    if role_arn:
+        # Assume the specified role
+        sts_client = session.client('sts')
+        response = sts_client.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName='secret_manager_session'
+        )
+
+        # Create a new session using the assumed role credentials
+        assumed_session = boto3.Session(
+            aws_access_key_id=response['Credentials']['AccessKeyId'],
+            aws_secret_access_key=response['Credentials']['SecretAccessKey'],
+            aws_session_token=response['Credentials']['SessionToken']
+        )
+
+        # Update the client to use the assumed session
+        client = assumed_session.client('secretsmanager')
+
+    response = client.get_secret_value(SecretId=secret_name)
+    
+    if 'SecretString' in response:
+        return response['SecretString']
+    else:
+        # Handle binary secrets
+        return response['SecretBinary']
+
+# Specify the name of the secret to retrieve
+secret_name = 'your_secret_name'
+
+# Specify your AWS access key ID and secret access key
+access_key_id = 'your_access_key_id'
+secret_access_key = 'your_secret_access_key'
+
+# Specify the ARN of the IAM role to assume (optional)
+role_arn = 'arn:aws:iam::123456789012:role/your-role-name'
+
+# Retrieve the secret value
+secret_value = get_secret_value(secret_name, access_key_id, secret_access_key, role_arn)
+
+# Print the secret value
+print(secret_value)
