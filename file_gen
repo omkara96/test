@@ -1,28 +1,23 @@
-DECLARE
-  l_file UTL_FILE.file_type;
-  l_data your_table%ROWTYPE;
-  l_filename VARCHAR2(100);
-  l_cursor SYS_REFCURSOR;
-BEGIN
-  OPEN l_cursor FOR your_query;
-  
-  LOOP
-    FETCH l_cursor INTO l_data;
-    EXIT WHEN l_cursor%NOTFOUND;
+import cx_Oracle
+import os
+
+# Configure connection details
+connection = cx_Oracle.connect("<username>/<password>@<host>:<port>/<service_name>")
+cursor = connection.cursor()
+
+# Execute the query
+query = "<your_query>"
+cursor.execute(query)
+
+# Fetch and save each row to separate files
+for row in cursor:
+    column_value = str(row[0])  # Replace [0] with the index of the desired column
+    filename = f"{column_value}.txt"
+    filepath = os.path.join("/path/to/export/files", filename)  # Replace with your desired local directory
     
-    -- Generate the file name using a column value
-    l_filename := '/path/to/export/files/' || l_data.column_name || '.txt';
-    
-    -- Open the file
-    l_file := UTL_FILE.fopen('EXPORT_DIR', l_filename, 'W');
-    
-    -- Write data to the file
-    UTL_FILE.put_line(l_file, l_data.column_name);
-    
-    -- Close the file
-    UTL_FILE.fclose(l_file);
-  END LOOP;
-  
-  CLOSE l_cursor;
-END;
-/
+    with open(filepath, "w") as file:
+        file.write(column_value)
+
+# Close the cursor and connection
+cursor.close()
+connection.close()
