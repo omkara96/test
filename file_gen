@@ -2,19 +2,27 @@ DECLARE
   l_file UTL_FILE.file_type;
   l_data your_table%ROWTYPE;
   l_filename VARCHAR2(100);
+  l_cursor SYS_REFCURSOR;
 BEGIN
-  FOR rec IN (SELECT * FROM your_table) LOOP
+  OPEN l_cursor FOR your_query;
+  
+  LOOP
+    FETCH l_cursor INTO l_data;
+    EXIT WHEN l_cursor%NOTFOUND;
+    
     -- Generate the file name using a column value
-    l_filename := '/path/to/export/files/' || rec.column_name || '.txt';
+    l_filename := '/path/to/export/files/' || l_data.column_name || '.txt';
     
     -- Open the file
     l_file := UTL_FILE.fopen('EXPORT_DIR', l_filename, 'W');
     
     -- Write data to the file
-    UTL_FILE.put_line(l_file, rec.column_name);
+    UTL_FILE.put_line(l_file, l_data.column_name);
     
     -- Close the file
     UTL_FILE.fclose(l_file);
   END LOOP;
+  
+  CLOSE l_cursor;
 END;
 /
