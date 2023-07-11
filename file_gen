@@ -1,0 +1,20 @@
+DECLARE
+  l_file UTL_FILE.file_type;
+  l_data your_table%ROWTYPE;
+  l_filename VARCHAR2(100);
+BEGIN
+  FOR rec IN (SELECT * FROM your_table) LOOP
+    -- Generate the file name using a column value
+    l_filename := '/path/to/export/files/' || rec.column_name || '.txt';
+    
+    -- Open the file
+    l_file := UTL_FILE.fopen('EXPORT_DIR', l_filename, 'W');
+    
+    -- Write data to the file
+    UTL_FILE.put_line(l_file, rec.column_name);
+    
+    -- Close the file
+    UTL_FILE.fclose(l_file);
+  END LOOP;
+END;
+/
