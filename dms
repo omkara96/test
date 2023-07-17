@@ -1,0 +1,121 @@
+{
+  "rules": [
+    {
+      "rule-type": "selection",
+      "rule-id": "1",
+      "rule-name": "SourceSchemaMapping",
+      "object-locator": {
+        "schema-name": "CIM_LC_PRST"
+      },
+      "rule-action": "include"
+    },
+    {
+      "rule-type": "selection",
+      "rule-id": "2",
+      "rule-name": "SourceTableMapping",
+      "object-locator": {
+        "schema-name": "CIM_LC_PRST",
+        "table-name": [
+          "PRST_ULT_ACDMC_SCTY_C",
+          "PRST_ULT_ACDMC_SCTY_SPCLST_C",
+          "PRST_ULT_ADV_MDCL_CR_C",
+          "PRST_ULT_ADV_MDCL_INST_C",
+          "PRST_ULT_BLNG_ACDMC_SCTY_C",
+          "PRST_ULT_DCTR_C",
+          "PRST_ULT_DCTR_WKPLC_C",
+          "PRST_ULT_DPT_C",
+          "PRST_ULT_FCLTY_ADD_ITM_C",
+          "PRST_ULT_FCLTY_C",
+          "PRST_ULT_FCLTY_CLS_C",
+          "PRST_ULT_GRDT_SCHL_C",
+          "PRST_ULT_GRDT_SCHL_DPT_C",
+          "PRST_ULT_HSPTL_CLS_C",
+          "PRST_ULT_MDCL_CR_ZN_ADDR_C",
+          "PRST_ULT_MDCL_CR_ZN_PRF_C",
+          "PRST_ULT_MDCL_CR_ZN_SCD_C",
+          "PRST_ULT_MDCL_CR_ZN_THD_C",
+          "PRST_ULT_MDCL_FNC_ASMT_C",
+          "PRST_ULT_MDCL_SPCLST_C",
+          "PRST_ULT_MNGMNT_BDY_C",
+          "PRST_ULT_NURSING_CLS_C",
+          "PRST_ULT_PHRMCST_C",
+          "PRST_ULT_PHRMCST_WKPLC_C",
+          "PRST_ULT_PHRMCY_C",
+          "PRST_ULT_PRFCTR_C",
+          "PRST_ULT_PRF_MDCL_FNC_C",
+          "PRST_ULT_PSTN_C",
+          "PRST_ULT_SPCLTY_C"
+        ]
+      },
+      "rule-action": "include"
+    },
+    {
+      "rule-type": "transformation",
+      "rule-id": "3",
+      "rule-name": "TargetSchemaMapping",
+      "rule-action": "rename",
+      "object-locator": {
+        "schema-name": "CIM_LC_PRST"
+      },
+      "replacement-schema": {
+        "schema-name": "CIM_LC_REPLICA"
+      }
+    },
+    {
+      "rule-type": "transformation",
+      "rule-id": "4",
+      "rule-name": "TargetTableMapping",
+      "rule-action": "rename",
+      "object-locator": {
+        "schema-name": "CIM_LC_REPLICA"
+      },
+      "replacement-table": {
+        "schema-name": "CIM_LC_REPLICA",
+        "table-name": [
+          "H3001_001_ULT_ACDMC_SCTY",
+          "H3001_002_ULT_ACDMC_SCTY_SPCLST",
+          "H3001_003_ULT_ADV_MDCL_CR",
+          "H3001_004_ULT_ADV_MDCL_INSTRMNT",
+          "H3001_005_ULT_BLNG_ACDMC_SCTY",
+          "H3001_006_ULT_DCTR",
+          "H3001_007_ULT_DCTR_WKPLC",
+          "H3001_008_ULT_DPT",
+          "H3001_009_ULT_FCLTY",
+          "H3001_010_ULT_FCLTY_ADD_ITM",
+          "H3001_011_ULT_FCLTY_CLS",
+          "H3001_012_ULT_GRDT_SCHL",
+          "H3001_013_ULT_GRDT_SCHL_W_DPT",
+          "H3001_014_ULT_HSPTL_CLS",
+          "H3001_015_ULT_MDCL_CR_ZN_ADDRSS",
+          "H3001_016_ULT_MDCL_CR_ZN_PRFCTR",
+          "H3001_017_ULT_MDCL_CR_ZN_SCD",
+          "H3001_018_ULT_MDCL_CR_ZN_THD",
+          "H3001_019_ULT_MDCL_FNC_ASMT",
+          "H3001_020_ULT_MDCL_SPCLST",
+          "H3001_021_ULT_MNGMNT_BDY",
+          "H3001_022_ULT_NURSING_CLS",
+          "H3001_023_ULT_PHRMCST",
+          "H3001_024_ULT_PHRMCST_WKPLC",
+          "H3001_025_ULT_PHRMCY",
+          "H3001_026_ULT_PRFCTR",
+          "H3001_027_ULT_PRF_MDCL_FNC",
+          "H3001_028_ULT_PSTN",
+          "H3001_029_ULT_SPCLTY"
+        ]
+      }
+    },
+    {
+      "rule-type": "transformation",
+      "rule-id": "5",
+      "rule-name": "ColumnDefaultValue",
+      "rule-action": "add-column",
+      "rule-target": "all-columns",
+      "value": {
+        "DA_CURRENT_FLAG": "'Y'",
+        "DA_VALID_FROM_DATE": "SYSDATE",
+        "DA_VALID_TO_DATE": "SYSDATE",
+        "DA_INTERFACE_CODE": "'3001'"
+      }
+    }
+  ]
+}
