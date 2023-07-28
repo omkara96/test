@@ -2,7 +2,7 @@ import cx_Oracle
 import os
 
 def generate_insert_scripts(schema_name, table_name, cursor):
-    # Generate the insert scripts as before
+    # Generate the insert scripts with data
     insert_script = f"INSERT INTO {schema_name}.{table_name} ("
     values_script = "VALUES ("
 
@@ -17,7 +17,30 @@ def generate_insert_scripts(schema_name, table_name, cursor):
     insert_script = insert_script[:-2] + ")"
     values_script = values_script[:-2] + ")"
 
-    return f"{insert_script}\n{values_script};\n"
+    # Fetch all rows from the table
+    cursor.execute(f"SELECT * FROM {schema_name}.{table_name}")
+    rows = cursor.fetchall()
+
+    insert_scripts = f"{insert_script}\n"
+
+    for row in rows:
+        insert_values = values_script
+        for column, value in zip(columns, row):
+            # If the value is None, set it to NULL in the script
+            if value is None:
+                value = "NULL"
+            else:
+                # If the value is a string, wrap it in single quotes
+                if isinstance(value, str):
+                    value = value.replace("'", "''")
+                    value = f"'{value}'"
+                else:
+                    value = str(value)
+            insert_values = insert_values.replace(f":{column}", value, 1)
+
+        insert_scripts += f"{insert_values};\n"
+
+    return insert_scripts
 
 def main():
     # Replace with your Oracle connection information
