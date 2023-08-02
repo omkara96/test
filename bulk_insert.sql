@@ -1,9 +1,13 @@
 import os
 import psycopg2
+import sys
 
 def read_sql_file(file_path):
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8') as file:
         return file.read()
+
+def split_sql_into_chunks(sql_query, chunk_size=16777216):
+    return [sql_query[i:i+chunk_size] for i in range(0, len(sql_query), chunk_size)]
 
 def bulk_insert_data(connection_string, sql_files_dir):
     try:
@@ -17,9 +21,13 @@ def bulk_insert_data(connection_string, sql_files_dir):
                     file_path = os.path.join(root, file)
                     sql_query = read_sql_file(file_path)
 
-                    # Execute the COPY command to bulk insert data
-                    cursor.execute(sql_query)
-                    connection.commit()
+                    # Split the SQL query into smaller chunks
+                    sql_chunks = split_sql_into_chunks(sql_query)
+
+                    for chunk in sql_chunks:
+                        # Execute the COPY command to bulk insert data
+                        cursor.execute(chunk)
+                        connection.commit()
 
                     # Get the total number of lines in the SQL file for progress tracking
                     total_lines = len(sql_query.splitlines())
@@ -47,5 +55,8 @@ if __name__ == "__main__":
 
     # Replace 'your_sql_files_directory' with the directory path containing your .sql files
     sql_files_dir = 'your_sql_files_directory'
+
+    # Set the encoding for standard output to UTF-8
+    sys.stdout.reconfigure(encoding='utf-8')
 
     bulk_insert_data(connection_string, sql_files_dir)
