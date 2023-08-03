@@ -1,47 +1,29 @@
--- Step 1: Create the function
-CREATE OR REPLACE FUNCTION migrate_data(
+CREATE OR REPLACE PROCEDURE migrate_data_without_identity(
     source_schema TEXT,
     target_schema TEXT,
-    table_list TEXT
+    table_name TEXT
 )
-RETURNS VOID
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    source_tables TEXT[];
-    target_table TEXT;
-    identity_column TEXT;
-    query TEXT;
+    target_identity_col TEXT;
 BEGIN
-    source_tables := STRING_TO_ARRAY(table_list, ',');
+    -- Find the identity column in the target table
+    SELECT column_name
+    INTO target_identity_col
+    FROM information_schema.columns
+    WHERE table_schema = target_schema
+        AND table_name = table_name
+        AND is_identity = 'YES';
 
-    FOREACH source_table IN ARRAY source_tables LOOP
-        target_table := target_schema || '.' || source_table;
-        
-        -- Get the identity column name for the target table
-        EXECUTE format('SELECT column_name
-                        FROM information_schema.columns
-                        WHERE table_schema = %L
-                        AND table_name = %L
-                        AND column_default LIKE %L',
-                        target_schema, source_table, 'nextval%')
-        INTO identity_column;
-        
-        IF identity_column IS NOT NULL THEN
-            -- If an identity column is found, perform the migration with identity insert
-            query := format('INSERT INTO %I.%I (%s) SELECT %s FROM %I.%I',
-                             target_schema, source_table, identity_column,
-                             identity_column, source_schema, source_table);
-        ELSE
-            -- If no identity column is found, perform the migration without identity insert
-            query := format('INSERT INTO %I.%I SELECT * FROM %I.%I',
-                             target_schema, source_table, source_schema, source_table);
-        END IF;
-        
-        EXECUTE query;
-    END LOOP;
+    IF target_identity_col IS NULL THEN
+        RAISE EXCEPTION 'The target table does not have an identity column';
+    END IF;
+
+    -- Generate the dynamic SQL query for the migration
+    EXECUTE format('INSERT INTO %I.%I (%I) SELECT %I FROM %I.%I', target_schema, table_name, target_identity_col, target_identity_col, source_schema, table_name);
+
+    -- Display the message once the migration is complete
+    RAISE INFO 'Data migration completed successfully.';
 END;
 $$;
-
--- Step 2: Call the function with the desired source schema, target schema, and comma-separated table list
-SELECT migrate_data('source_schema', 'target_schema', 'table1,table2,table3');
