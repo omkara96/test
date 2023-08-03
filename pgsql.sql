@@ -1,18 +1,21 @@
--- Step 1: Create the procedure
-CREATE OR REPLACE PROCEDURE migrate_data(
+-- Step 1: Create the function
+CREATE OR REPLACE FUNCTION migrate_data(
     source_schema TEXT,
     target_schema TEXT,
-    table_list TEXT[]
+    table_list TEXT
 )
+RETURNS VOID
 LANGUAGE plpgsql
 AS $$
 DECLARE
-    source_table TEXT;
+    source_tables TEXT[];
     target_table TEXT;
     identity_column TEXT;
     query TEXT;
 BEGIN
-    FOR source_table IN ARRAY table_list LOOP
+    source_tables := STRING_TO_ARRAY(table_list, ',');
+
+    FOREACH source_table IN ARRAY source_tables LOOP
         target_table := target_schema || '.' || source_table;
         
         -- Get the identity column name for the target table
@@ -40,5 +43,5 @@ BEGIN
 END;
 $$;
 
--- Step 2: Call the procedure with the desired source schema, target schema, and table list
-CALL migrate_data('source_schema', 'target_schema', ARRAY['table1', 'table2', 'table3']);
+-- Step 2: Call the function with the desired source schema, target schema, and comma-separated table list
+SELECT migrate_data('source_schema', 'target_schema', 'table1,table2,table3');
