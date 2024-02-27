@@ -1,0 +1,271 @@
+import io
+import os
+import re
+import sys
+import boto3
+import json
+import csv
+import botocore
+import pandas as pd
+from airflow import DAG
+from airflow.operators.python_operator import PythonOperator
+from airflow.operators.email_operator import EmailOperator
+from airflow.operators.dummy import DummyOperator
+from airflow.utils.db import create_session
+from airflow.models import Variable
+from airflow.utils.dates import days_ago
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.hooks.base_hook import BaseHook
+from airflow.utils.email import send_email
+
+
+# import params from this py file's directory
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+#import params_provider_hhiejp_file_validator as params
+
+"""
+Parameters
+"""
+input = {
+    'airflow_connection': 'HHIEJP_PROD_Airflow_Connection', 
+    'email_notification': ['jp_hhie_dia_job@merck.com'], 
+    'hhie_s3_bucket': 'com-merck-hhiejp-prod-backbone', 
+    'region': 'ap-southeast-1', 
+    'start_date': None, 
+    'app_name': 'hhiejp', 
+    'cntry_cd': 'JP', 
+    'env': 'prod', 
+    'concurrency': 10
+}
+"""
+Private Functions
+"""
+def print_var():
+    """
+    Prints airflow variables to console log
+    """
+    with create_session() as session:
+        airflow_vars = {var.key: var.val for var in session.query(Variable)}
+        print(airflow_vars)
+
+
+def _get_s3_client(role_arn: str):
+    """
+    Returns boto3 s3 client
+    """
+    connection = BaseHook.get_connection(input.get("airflow_connection"))
+    if role_arn is None:
+        return boto3.client(
+            "s3",
+            aws_access_key_id=connection.login,
+            aws_secret_access_key=connection.password)
+
+    # Assume specified role
+    stsresponse = boto3.client(
+        'sts',
+        aws_access_key_id=connection.login,
+        aws_secret_access_key=connection.password
+    ).assume_role(
+        RoleArn=role_arn,
+        RoleSessionName='newsession')
+
+    return boto3.client(
+        's3',
+        aws_access_key_id=stsresponse["Credentials"]["AccessKeyId"],
+        aws_secret_access_key=stsresponse["Credentials"]["SecretAccessKey"],
+        aws_session_token=stsresponse["Credentials"]["SessionToken"])
+
+
+def _get_df_from_s3(bucket: str, key: str, schema: list, sep: str, role_arn: str):
+    """
+    Returns a pandas dataframe by reading a file from AWS S3 
+    """
+    
+    s3_object = _get_s3_client(
+        role_arn
+    ).get_object(
+		    Bucket=bucket, 
+		    Key=key
+	).get("Body").read()
+    return pd.read_csv(io.BytesIO(s3_object), names=schema, sep=sep,encoding= 'unicode_escape')
+         
+
+def _pk_check(bucket: str, key: str, schema: list, pk_cols: list, sep: str, role_arn: str):
+    """
+    Check primary key columns in file
+    """
+    df = _get_df_from_s3(bucket, key, schema, sep, role_arn)
+    print(df)
+    if not set(pk_cols).issubset(df.columns):
+        return False, "Either Primary key column doesn't exist or File Header has incorrect delimiter and data as correct delimiter"
+    duplicated_df = df[df.duplicated(subset=pk_cols, keep=False)]
+    if not duplicated_df.empty:
+        print(duplicated_df)
+        return False, "Duplicate keys found"
+    return True, None
+      
+def _validate_delimiter(bucket: str, key: str, schema: list, sep: str, role_arn: str,encoding: str):
+    
+    dlmtr=sep
+    s3_object = _get_s3_client(
+        role_arn
+    ).get_object(
+		    Bucket=bucket, 
+		    Key=key
+	)
+    
+    contents = s3_object['Body'].read()
+    try:
+        if encoding=='shift-JIS':
+            data=contents.decode("cp932")
+            if data =='':
+                #print('File empty')
+                return "File empty"
+            else:
+                dialect = csv.Sniffer().sniff(data, [dlmtr])
+                reader = csv.reader(data, dialect)
+                print('File_Delimiter:',reader.dialect.delimiter)
+                return reader.dialect.delimiter
+        else:
+            data=contents.decode("utf-8")
+            if data =='':
+                #print('File empty')
+                return "File empty"
+            else:
+                dialect = csv.Sniffer().sniff(data, [dlmtr])
+                reader = csv.reader(data, dialect)
+                print('File_Delimiter:',reader.dialect.delimiter)
+                return reader.dialect.delimiter
+    except Exception as e:
+        print(e)
+        return e
+        
+def _is_valid(table: str):
+    """
+    Check if table is valid
+    """
+    try:
+        encoding=table.get("encoding")
+        # Remove slash from the end if there is one
+        path = table.get("path")
+        if path[-1] == "/":
+            path = path[:-1]
+        
+        # File existence check
+        '''
+        contents = _get_s3_client(
+            table.get("role_arn")
+        ).list_objects_v2(
+            Bucket=table.get("bucket", input.get("hhie_s3_bucket")), 
+            Prefix=path
+        )['Contents']
+        files = [obj['Key'] for obj in contents]
+        replaced = [file.replace(f'{path}/', '') for file in files]
+        print(f"Files found: {replaced}")
+        '''
+
+        paginator = _get_s3_client(
+            table.get("role_arn")
+        ).get_paginator('list_objects_v2')
+        pages = paginator.paginate(Bucket=table.get("bucket", input.get("hhie_s3_bucket")), Prefix=path)
+        
+        list_files=[]
+        for page in pages:
+            files = [obj['Key'] for obj in page['Contents']]
+            list_files=list_files+files
+            
+        #print("list_files:",list_files)
+            
+        replaced = [file.replace(f'{path}/', '') for file in list_files]           
+        print(f"Files found: {replaced}")
+        
+        # filter with regex condition
+        regex = re.compile(table.get("file_regex"))
+        filtered_list = list(filter(regex.match, replaced))
+        if not filtered_list:
+            return False, "No file exists that matches condition"
+        print(filtered_list)
+        
+        #File Delimiter check
+        result=''
+        for file in filtered_list:
+         result=_validate_delimiter(
+            bucket=table.get("bucket", input.get("hhie_s3_bucket")), 
+            key=f'{path}/{file}', 
+            role_arn=table.get("role_arn"),
+            schema=table.get("schema"),
+            sep=table.get("sep"),
+            encoding=table.get("encoding")
+         )
+        print(result)
+        if result!=table.get("sep") and result!='File empty':
+            return False, "Incorrect File Delimiter"
+            
+                
+        # TODO: PK check: call glue job for huge files?
+        pk_check_result = {}
+        for file in filtered_list:
+         pk_check_result[file] = _pk_check(
+            bucket=table.get("bucket", input.get("hhie_s3_bucket")), 
+            key=f'{path}/{file}', 
+            pk_cols=table.get("key_columns"),
+            role_arn=table.get("role_arn"),
+            schema=table.get("schema"),
+            sep=table.get("sep")
+         )
+        print(pk_check_result)
+        print(list(pk_check_result.values()))
+        for result in list(pk_check_result.values()):
+            if not result[0]:
+                return False, pk_check_result
+        return True, "All set to go"
+    except Exception as e:
+        return False, e
+
+def validator(**kwargs):
+    """
+    python_callable for file validation task
+    """
+    dataset = kwargs['dag_run'].conf['dataset']
+    tables = kwargs['dag_run'].conf['tables']
+    for table in tables:
+        is_valid, message = _is_valid(table)
+        if not is_valid:
+            print(f"Validation failed for {table}")
+            print(f"Error: {message}") 
+            send_email(
+                to=input.get("email_notification"),
+                subject=f"Failure: <PROD> {dataset} File validation",
+                html_content=f"Validation failed for dataset: {dataset}, table: {table} <br>Error: {message}")
+            exit(1)
+
+
+"""
+DAG definition
+"""
+with DAG(
+	f'hhiejp_{input.get("env")}_file_validator',
+	default_args={
+        'owner': 'airflow',
+        'depends_on_past': False,
+        'start_date': days_ago(1),
+        'email_on_failure': True,
+        'email': []},
+	schedule_interval=None
+) as dag:
+    start = DummyOperator(task_id='start')
+    print_var = PythonOperator(
+    	task_id='print_var',
+    	python_callable=print_var,
+    	provide_context=True)
+    validator = PythonOperator(
+        task_id='validator',
+    	python_callable=validator,
+    	provide_context=True)
+    end = DummyOperator(task_id='end')
+
+
+"""
+Task dependencies
+"""
+start >> print_var >> validator >> end
